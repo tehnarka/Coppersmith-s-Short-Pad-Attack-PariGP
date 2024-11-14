@@ -1,0 +1,128 @@
+install("outmat","vG")
+default(parisize, 2400000000)
+
+\\ For test purposes, ignore
+genpoly(N,d,eps) = {
+    local(f, coefs);
+
+    X = floor(N^(1/d - eps));
+    coefs = vector(d , i, random(10*N)); 
+    f = x^d + Pol(coefs);
+
+    x0 = random(X);
+    f -= subst(f,x,x0)%N;
+
+    return(f);
+};
+
+
+\\ Generate random message and paddings that can be attacked
+\\( This variables will be global )
+gen_messages(N) = {
+    n = logint(N,2) + 1;
+    k = floor(n/9); \\ n/e^2
+    
+    M = random( floor( N / (2^k) )- 1); 
+    r1 = random(2^k);
+    r2 = random(2^k);
+    
+    M1 = 2^k * M + r1;
+    M2 = 2^k * M + r2;
+    C1 = M1^3 %N;
+    C2 = M2^3 %N;
+
+    return();
+};
+
+
+\\ Find the roots of f mod N that are less than X.
+coppersmith_roots(f,N,X) = {
+    local(d,m,w,L,index,B,P,u,v,h,roots);
+    d = poldegree(f);
+
+    \\ Finding the right m
+    m = 2;
+    w = d*(m+1);
+    
+    while( (w+1) * X^(w-1) * (sqrt(3)/2)^(-(w-1)) > N^m && m < 100,
+        m += 1;
+        w = d*(m+1);
+    );
+    print(m);
+    \\ After m is found, create the matrix as shown in the proof
+    L = matrix(w, w, i, j, 0);
+    index = 1;
+
+    for (v = 0, m,
+        for (u = 0, d- 1, 
+            P = N^(m-v) * X^u * x^u * subst(f, x, x * X)^v;
+            revvec = Vecrev(P);
+            row = concat(revvec, vector(w - #revvec));
+    
+            L[index, ] = row;
+            index += 1;
+        );
+    );
+
+    \\ LLL
+    L = L~;
+    print("LLL begins");
+    B = qflll(L,3);
+    print("LLL ends");
+    \\outmat(L);
+    \\outmat(B);
+
+    \\ We take the short vector (if it's constant, we try the next one with no guaranty)
+    \\ Also it is scaled so that the root is x0 and not x0/X
+    h1 = Polrev(B[,1]);
+    h2 = Polrev(B[,2]); 
+    if( poldegree(h1) == 0, P = ( subst(h2, x, x/X ) ), P = ( subst( h1, x, x/X))  
+    );
+
+    \\ We find the integer roots and return them 
+    roots = polroots(P);
+    roots = [real(r) | r <- roots, imag(z) == 0] ;
+    roots = [floor(r) | r <- roots, r == floor(r)];
+    return( roots );
+};
+
+
+\\Recovers M2. f is such that f(M2) = aM2+b = M1
+fr_attack(f,C1,C2,N) = {
+    local(a,b,t);
+    b = subst(f,x,0);
+    a = subst(f,x,1)-b;
+    t = b*(C1 + 2*a^3 * C2 - b^3) / ( a*(C1-a^3*C2 + 2*b^3) ) ;
+    return ( t % N ); 
+};
+
+
+
+\\Recovers M2
+coppersmith_attack(C1,C2,N,X) = {
+    \\ Define the g1 and g2 as in the proof and take their resultant
+    g1 = x^3 - C1;
+    g2 = (x+y)^3 - C2;
+    h = polresultant(g1,g2,x);
+
+    \\ Change of variable name and reducing modulo N
+    h = subst(h,y,x);
+    h = Pol( lift( Vec(h) % N) );
+
+    \\ Apply coppersmith algorithm
+    roots = coppersmith_roots(h,N,X);
+    
+    \\We assume that we found only one root, it can be changed to test for all integer roots
+    g = x - roots[1]; 
+
+    \\g is such that g(M2) = M2 + Delta = M1
+    return(fr_attack(g,C1,C2,N));
+};
+
+
+
+\\N = prime(1376012341)*prime(7501312341) = 5948712409656761020321
+\\N = 123456700649 * 423456700523         = 52278567114281252739427
+\\N = 4234567807433 * 8234567807519       = 34869835745844097801488727
+\\N = 82345678006271 * 102345678004883    = 8427724246323587692442621293
+\\N = 1522605027922533360535618378132637429718068114961380688657908494580122963258952897654000350692006139
