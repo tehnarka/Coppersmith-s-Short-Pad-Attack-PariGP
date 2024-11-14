@@ -1,4 +1,4 @@
-# paricopper
+# Paricopper
 
 ## Description
 This script implements Coppersmith's algorithm to find small integer roots of polynomials modulo an integer. It is designed for cryptographic research, particularly in analyzing the security of cryptographic protocols.
